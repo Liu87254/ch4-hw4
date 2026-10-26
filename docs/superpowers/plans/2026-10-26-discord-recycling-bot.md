@@ -6,14 +6,14 @@
 
 **Architecture:** `discord.py` slash command downloads the attachment and hands the raw bytes to a classifier module, which prompts Gemini to return one of a fixed set of category codes plus a confidence level. The command module looks up that code in a hand-written rules table (never trusts LLM-generated disposal text) and formats the reply. Low confidence, unparseable responses, or codes outside the known set are all treated as "uncertain" rather than guessed.
 
-**Tech Stack:** Python, `discord.py`, `google-generativeai` (Gemini, free tier), `python-dotenv`, `pytest`
+**Tech Stack:** Python, `discord.py`, `google-genai` (Gemini, free tier), `python-dotenv`, `pytest`
 
 **Spec:** `docs/superpowers/specs/2026-10-26-discord-recycling-bot-design.md`
 
 ## Global Constraints
 
 - Classification rules follow Taiwan EPA (環保署) resource recycling categories — no other region's standard.
-- Vision classification uses Google Gemini's free-tier API (`google-generativeai`), not any paid/billed API — see spec "核心技術選擇".
+- Vision classification uses Google Gemini's free-tier API (`google-genai`), not any paid/billed API — see spec "核心技術選擇".
 - Target classification accuracy is 90%+, validated manually with real photos per category (not enforced by any single automated test — see Task 5).
 - Bot interaction is exclusively the `/recycle` slash command with an image attachment — no passive channel-message scanning.
 - Disposal instructions (wash/disassemble/where to drop off) always come from the local rule table, never from LLM-generated free text.
@@ -42,7 +42,7 @@
 
 - [ ] **Step 1: Write `requirements.txt`**
 
-Pin these packages (latest stable at time of writing, no upper bound needed): `discord.py`, `google-generativeai`, `python-dotenv`, `pytest`, `pytest-asyncio`.
+Pin these packages (latest stable at time of writing, no upper bound needed): `discord.py`, `google-genai`, `python-dotenv`, `pytest`, `pytest-asyncio`.
 
 - [ ] **Step 2: Write `.env.example`**
 
@@ -261,7 +261,7 @@ Expected: FAIL — `_call_gemini` and `classify_image` not defined
 
 - [ ] **Step 8: Implement `_call_gemini(image_bytes: bytes)` and `classify_image(image_bytes: bytes) -> ClassificationResult`**
 
-`_call_gemini` is a small private wrapper around the `google.generativeai` SDK call (configure with `GEMINI_API_KEY` from `os.environ`, build a prompt that lists `ALLOWED_CATEGORIES` and instructs the model to reply with only a JSON object `{"category": ..., "confidence": "high"|"medium"|"low"}`, send the image bytes + prompt, return the SDK response object). `classify_image` calls `_call_gemini(image_bytes)` inside a `try/except Exception as e: raise ClassifierError(str(e))`, then returns `parse_classification_response(response.text)`.
+`_call_gemini` is a small private wrapper around the `google.genai` SDK call (`from google import genai`; `genai.Client(api_key=...)` built from `GEMINI_API_KEY` in `os.environ`; build a prompt that lists `ALLOWED_CATEGORIES` and instructs the model to reply with only a JSON object `{"category": ..., "confidence": "high"|"medium"|"low"}`; call `client.models.generate_content(model="gemini-2.0-flash", contents=[prompt, types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")])`; return the SDK response object). `classify_image` calls `_call_gemini(image_bytes)` inside a `try/except Exception as e: raise ClassifierError(str(e))`, then returns `parse_classification_response(response.text)`.
 
 - [ ] **Step 9: Run tests to verify they pass**
 
