@@ -1,7 +1,18 @@
 import json
+import os
 from dataclasses import dataclass
 
+from google import genai
+from google.genai import types
+
 from rules.recycling_rules import ALLOWED_CATEGORIES
+
+_PROMPT_TEMPLATE = (
+    "You are a waste-sorting assistant for Taiwan's EPA recycling rules. "
+    "Classify the material/recycling symbol in this photo as exactly one of "
+    "these category codes: " + ", ".join(ALLOWED_CATEGORIES) + ". "
+    'Reply with ONLY a JSON object: {"category": "<code>", "confidence": "high"|"medium"|"low"}.'
+)
 
 
 @dataclass(frozen=True)
@@ -27,3 +38,22 @@ def parse_classification_response(raw_text: str) -> ClassificationResult:
         return ClassificationResult(category="unknown", confidence="low", is_uncertain=True)
 
     return ClassificationResult(category=category, confidence=confidence, is_uncertain=False)
+
+
+def _call_gemini(image_bytes: bytes):
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    return client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=[
+            _PROMPT_TEMPLATE,
+            types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+        ],
+    )
+
+
+def classify_image(image_bytes: bytes) -> ClassificationResult:
+    try:
+        response = _call_gemini(image_bytes)
+    except Exception as e:
+        raise ClassifierError(str(e))
+    return parse_classification_response(response.text)
