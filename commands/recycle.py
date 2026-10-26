@@ -1,3 +1,5 @@
+import asyncio
+
 from rules.recycling_rules import get_rule
 from vision.classifier import classify_image, ClassifierError
 
@@ -30,7 +32,7 @@ async def handle_recycle_command(attachment) -> str:
 
     image_bytes = await attachment.read()
     try:
-        result = classify_image(image_bytes)
+        result = await asyncio.to_thread(classify_image, image_bytes)
     except ClassifierError:
         return SERVICE_ERROR_REPLY
 

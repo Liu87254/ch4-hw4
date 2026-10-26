@@ -43,7 +43,7 @@ def parse_classification_response(raw_text: str) -> ClassificationResult:
 def _call_gemini(image_bytes: bytes):
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     return client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-3.8-flash",
         contents=[
             _PROMPT_TEMPLATE,
             types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),

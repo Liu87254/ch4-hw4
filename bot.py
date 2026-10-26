@@ -16,8 +16,9 @@ tree = app_commands.CommandTree(client)
 @tree.command(name="recycle", description="辨識垃圾/回收物照片的材質與回收標誌")
 @app_commands.describe(photo="要辨識的照片")
 async def recycle(interaction: discord.Interaction, photo: discord.Attachment | None = None):
+    await interaction.response.defer()
     reply = await handle_recycle_command(photo)
-    await interaction.response.send_message(reply)
+    await interaction.followup.send(reply)
 
 
 @client.event
