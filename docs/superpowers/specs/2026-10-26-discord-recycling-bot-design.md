@@ -8,9 +8,9 @@
 
 ## 核心技術選擇
 
-- **辨識方式**：呼叫 Anthropic Claude 的多模態 (vision) API 辨識圖片，而非自建/訓練影像分類模型。
-  - 理由：自建模型要達到 90% 準確度需要大量標註資料與訓練成本；多模態 LLM 搭配提示工程即可在常見回收標誌上取得高準確度，且開發快、無需訓練 pipeline，之後規則變動只需調整 prompt。
-  - 代價：每次辨識需呼叫付費 API，需要網路連線與 Anthropic API key。
+- **辨識方式**：呼叫 Google Gemini 的多模態 (vision) API 辨識圖片，而非自建/訓練影像分類模型，也不使用需要信用卡/付費的 API。
+  - 理由：自建模型要達到 90% 準確度需要大量標註資料與訓練成本；純本地 OCR 方案雖零成本，但只能辨識印刷文字型標誌（如塑膠編號），對廚餘、一般垃圾等無固定印刷標誌的類別幾乎無法判斷，難以達到 90% 準確度目標。Gemini API 在 Google AI Studio 可取得免費額度，不需信用卡、不會被扣款，且多模態 LLM 搭配提示工程可在常見回收標誌上取得高準確度。
+  - 代價：需註冊 Google 帳號並取得 API Key，免費額度有呼叫次數上限（例如每分鐘/每日限制），超過額度當日無法使用；需要網路連線。
 - **Bot 框架**：Python + `discord.py`。
 - **互動方式**：Slash command `/recycle` + 圖片附件（而非被動監聽頻道中所有圖片），避免誤判聊天頻道中不相關的圖片。
 - **部署環境**：先以本地執行（開發者自己的電腦）為主，之後若要長期上線可換到雲端主機，程式碼不需改動。
@@ -33,15 +33,15 @@
 
 1. 使用者於 Discord 輸入 `/recycle` 並附上圖片。
 2. 機器人下載附件圖片。
-3. 機器人將圖片送給 Claude Vision API，附上系統提示（說明分類代碼清單、要求輸出結構化分類代碼 + 信心程度），取得辨識結果。
+3. 機器人將圖片送給 Gemini Vision API，附上系統提示（說明分類代碼清單、要求輸出結構化分類代碼 + 信心程度），取得辨識結果。
 4. 機器人依照辨識出的分類代碼，查詢本地的**回收規則表**（清洗/拆解/處理方式等資訊皆由規則表決定，不由 LLM 自由生成文字）。
 5. 機器人組合中文回覆訊息，回傳給使用者。
 
 ### 關鍵設計：LLM 只負責分類，處理方式由規則表決定
 
-- Claude 的任務僅限於「辨識圖片中的材質與回收標誌，回傳一個分類代碼」（例如 `plastic_1`、`dry_battery`、`food_waste_wet`、`general_trash`），以及信心程度/是否不確定。
+- Gemini 的任務僅限於「辨識圖片中的材質與回收標誌，回傳一個分類代碼」（例如 `plastic_1`、`dry_battery`、`food_waste_wet`、`general_trash`），以及信心程度/是否不確定。
 - 清洗、拆解、投放方式等處理說明，全部來自專案內寫死的規則表（`rules/recycling_rules.py`），確保這些指示文字固定且正確，不受 LLM 生成文字不穩定影響。
-- 若 Claude 回報辨識不確定、圖片模糊，或回傳的分類代碼不在規則表中，機器人一律回覆「無法確定分類，請提供更清晰或更完整的照片」，不湊答案。
+- 若 Gemini 回報辨識不確定、圖片模糊，或回傳的分類代碼不在規則表中，機器人一律回覆「無法確定分類，請提供更清晰或更完整的照片」，不湊答案。
 
 ### 專案結構
 
@@ -49,7 +49,7 @@
 ch4-hw4/
 ├── bot.py                   # 進入點，啟動 discord.py bot
 ├── commands/recycle.py      # /recycle slash command 邏輯
-├── vision/classifier.py     # 呼叫 Anthropic API 辨識圖片，回傳分類代碼
+├── vision/classifier.py     # 呼叫 Gemini API 辨識圖片，回傳分類代碼
 ├── rules/recycling_rules.py # 台灣回收分類規則表（清洗/拆解/處理方式）
 ├── .env.example              # Token/Key 範例（真正的 .env 不進 git）
 ├── requirements.txt
@@ -58,8 +58,8 @@ ch4-hw4/
 
 ### 設定與機密管理
 
-- `DISCORD_TOKEN`、`ANTHROPIC_API_KEY` 存於 `.env`，透過 `.gitignore` 排除版本控制（專案已有 `.gitignore`，需確認涵蓋 `.env`）。
-- README 中列出取得 Discord Bot Token（Discord Developer Portal 建立應用程式）與 Anthropic API Key（Anthropic Console）的步驟，因使用者目前皆未申請。
+- `DISCORD_TOKEN`、`GEMINI_API_KEY` 存於 `.env`，透過 `.gitignore` 排除版本控制（專案已有 `.gitignore`，需確認涵蓋 `.env`）。
+- README 中列出取得 Discord Bot Token（Discord Developer Portal 建立應用程式）與 Gemini API Key（Google AI Studio，免費額度、不需信用卡）的步驟。
 
 ## 錯誤處理
 
@@ -67,14 +67,14 @@ ch4-hw4/
 |---|---|
 | 指令未附圖片 | 回覆提示：請附上照片 |
 | 附件非圖片格式 | 回覆提示：請上傳 jpg/png 圖片 |
-| Claude 辨識不確定/圖片模糊 | 回覆「無法確定分類」，並給拍照建議（光線充足、標誌入鏡） |
-| Anthropic API 呼叫失敗（網路、額度不足等） | 回覆「辨識服務暫時無法使用，請稍後再試」，並於後台記錄錯誤日誌 |
+| Gemini 辨識不確定/圖片模糊 | 回覆「無法確定分類」，並給拍照建議（光線充足、標誌入鏡） |
+| Gemini API 呼叫失敗（網路、免費額度已超過當日上限等） | 回覆「辨識服務暫時無法使用，請稍後再試」，並於後台記錄錯誤日誌 |
 | 辨識出的分類代碼不在規則表中（防禦性檢查） | 視為無法確定分類，回覆同上 |
 
 ## 測試計畫
 
 - **單元測試**：針對 `rules/recycling_rules.py` 的查詢邏輯，給定分類代碼驗證回傳正確的清洗/拆解/處理方式文字；針對分類代碼不存在時的防禦性邏輯。
-- **手動驗證**：使用數張涵蓋各分類（塑膠各編號、電池、廚餘、金屬、玻璃、紙類、一般垃圾）的真實照片，實測機器人辨識準確度是否達 90% 以上門檻，並視結果調整 Claude 的系統提示（prompt engineering）。
+- **手動驗證**：使用數張涵蓋各分類（塑膠各編號、電池、廚餘、金屬、玻璃、紙類、一般垃圾）的真實照片，實測機器人辨識準確度是否達 90% 以上門檻，並視結果調整 Gemini 的系統提示（prompt engineering）。若免費額度實測後準確度仍不足，需回頭檢視 prompt 或縮小分類範圍。
 
 ## 不在範圍內（Out of scope）
 
